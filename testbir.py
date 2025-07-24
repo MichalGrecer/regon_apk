@@ -4,8 +4,10 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext, filedialog
 from datetime import date
 from fpdf import FPDF
+import os
 
-# Klasa dla generatora PDF
+# --- Konfiguracja i funkcje PDF ---
+
 class PDF(FPDF):
     def header(self):
         self.set_font('DejaVuSansCondensed', 'B', 12)
@@ -17,10 +19,46 @@ class PDF(FPDF):
         self.set_font('DejaVuSansCondensed', 'I', 8)
         self.cell(0, 10, f'Strona {self.page_no()}/{{nb}}', 0, 0, 'C')
 
+def get_current_date():
+    return date.today().strftime("%d-%m-%Y")
+
+def export_to_pdf_from_widget(content, initial_filename_prefix):
+    if not content.strip():
+        messagebox.showwarning("Błąd", "Brak danych do wyeksportowania do PDF.")
+        return
+
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".pdf",
+        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+        initialfile=f"{initial_filename_prefix}_{get_current_date()}.pdf"
+    )
+
+    if file_path:
+        pdf = PDF()
+        pdf.alias_nb_pages()
+        try:
+            pdf.add_font('DejaVuSansCondensed', '', 'DejaVuSansCondensed.ttf')
+            pdf.add_font('DejaVuSansCondensed', 'B', 'DejaVuSansCondensed.ttf')
+            pdf.add_font('DejaVuSansCondensed', 'I', 'DejaVuSansCondensed.ttf')
+            pdf.set_font('DejaVuSansCondensed', '', 10)
+        except RuntimeError as e:
+            messagebox.showerror("Błąd czcionki", f"Nie można załadować czcionki DejaVuSansCondensed.ttf. Upewnij się, że plik jest w tym samym katalogu co skrypt: {e}")
+            return
+        
+        pdf.add_page()
+        
+        for line in content.split('\n'):
+            pdf.cell(0, 7, line, 0, 1, 'L')
+        
+        try:
+            pdf.output(file_path)
+            messagebox.showinfo("Sukces", f"Raport zapisano do: {file_path}")
+        except Exception as e:
+            messagebox.showerror("Błąd zapisu PDF", f"Nie udało się zapisać pliku PDF: {e}")
+
+# --- Funkcje pobierania danych GUS ---
+
 def pobierz_dane_gus_gui(nip):
-    """
-    Pobiera dane firmy z GUS na podstawie numeru NIP i zwraca słownik.
-    """
     klucz_uzytkownika = "abcde12345abcde12345"
     klient = None
     dane_do_raportu = {}
@@ -73,62 +111,48 @@ def pobierz_dane_gus_gui(nip):
         except Exception:
             pass
 
-def get_current_date():
-    """Pobiera aktualną datę w formacie DD-MM-YYYY."""
-    return date.today().strftime("%d-%m-%Y")
+# --- Funkcje obsługi historii ---
 
-def export_to_pdf_from_widget(content, initial_filename_prefix):
-    """Eksportuje podany tekst do pliku PDF."""
-    if not content.strip():
-        messagebox.showwarning("Błąd", "Brak danych do wyeksportowania do PDF.")
-        return
+HISTORY_FILE = "historia_regon.txt"
+search_history = []
 
-    file_path = filedialog.asksaveasfilename(
-        defaultextension=".pdf",
-        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
-        initialfile=f"{initial_filename_prefix}_{get_current_date()}.pdf"
-    )
+def save_history():
+    """Zapisuje listę historii do pliku txt."""
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        for entry in search_history:
+            f.write(entry + "\n")
 
-    if file_path:
-        pdf = PDF()
-        pdf.alias_nb_pages()
-        
-        try:
-            pdf.add_font('DejaVuSansCondensed', '', 'DejaVuSansCondensed.ttf')
-            pdf.add_font('DejaVuSansCondensed', 'B', 'DejaVuSansCondensed.ttf')
-            pdf.add_font('DejaVuSansCondensed', 'I', 'DejaVuSansCondensed.ttf')
-            pdf.set_font('DejaVuSansCondensed', '', 10)
-        except RuntimeError as e:
-            messagebox.showerror("Błąd czcionki", f"Nie można załadować czcionki DejaVuSansCondensed.ttf. Upewnij się, że plik jest w tym samym katalogu co skrypt: {e}")
-            return
-        
-        pdf.add_page()
-        
-        for line in content.split('\n'):
-            pdf.cell(0, 7, line, 0, 1, 'L')
-        
-        try:
-            pdf.output(file_path)
-            messagebox.showinfo("Sukces", f"Raport zapisano do: {file_path}")
-        except Exception as e:
-            messagebox.showerror("Błąd zapisu PDF", f"Nie udało się zapisać pliku PDF: {e}")
+def load_history():
+    """Wczytuje historię z pliku txt i aktualizuje pole tekstowe."""
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                search_history.append(line.strip())
+        update_history_display()
 
-# Globalna zmienna do obsługi Drag&Drop
+def update_history_display():
+    """Aktualizuje zawartość pola historii na podstawie listy w pamięci."""
+    history_text.config(state=tk.NORMAL)
+    history_text.delete(1.0, tk.END)
+    for entry in reversed(search_history):
+        history_text.insert(tk.END, entry + "\n")
+    history_text.config(state=tk.DISABLED)
+
+
+# --- Funkcje obsługi GUI i zdarzeń ---
+
 drag_data = {'text': None}
 
 def on_drag_start(event, source_entry):
-    """Zdarzenie uruchamiane po kliknięciu na pole Entry."""
     drag_data['text'] = f"{entry_labels[source_entry]}: {source_entry.get()}"
     root.config(cursor="hand2")
     root.bind('<ButtonRelease-1>', on_drop_global)
     root.bind('<Motion>', on_drag_motion_global)
 
 def on_drag_motion_global(event):
-    """Utrzymuje kursor "hand2" na całym oknie podczas przeciągania."""
     pass
 
 def on_drop_global(event):
-    """Globalna funkcja, która wywoła się po zwolnieniu przycisku myszy."""
     root.config(cursor="arrow")
     
     if drag_data['text']:
@@ -141,7 +165,6 @@ def on_drop_global(event):
             
             try:
                 index = selected_data_text.index(f"@{x_rel},{y_rel}")
-                # Dodajemy znak nowej linii, aby każdy wpis był w nowym wierszu
                 selected_data_text.insert(index, drag_data['text'] + "\n")
             except tk.TclError:
                 selected_data_text.insert(tk.END, drag_data['text'] + "\n")
@@ -152,7 +175,6 @@ def on_drop_global(event):
     root.unbind('<Motion>')
 
 def on_search_button_click():
-    """Funkcja wywoływana po kliknięciu przycisku 'Szukaj'."""
     nip_do_szukania = nip_entry.get().strip()
     if not nip_do_szukania:
         messagebox.showwarning("Błąd", "Proszę wprowadzić numer NIP.")
@@ -167,6 +189,16 @@ def on_search_button_click():
             value = str(dane.get(key, "")).strip()
             entry.insert(0, value)
             entry.config(state='readonly')
+        
+        # --- NOWA FUNKCJONALNOŚĆ HISTORII ---
+        nazwa_firmy = dane.get('Nazwa', 'Brak nazwy')
+        historia_wpis = f"{nip_do_szukania} | {nazwa_firmy}"
+        if historia_wpis not in search_history:
+            search_history.append(historia_wpis)
+            if len(search_history) > 20: # Ograniczanie historii do np. 20 wpisów
+                search_history.pop(0)
+            update_history_display()
+            save_history()
     else:
         for label_text, key in pola_do_wyswietlenia:
             entry = entry_widgets[label_text]
@@ -174,24 +206,22 @@ def on_search_button_click():
             entry.delete(0, tk.END)
             entry.config(state='readonly')
 
-
 def combine_entry_data():
-    """Zbiera dane ze wszystkich pól Entry i formatuje je w jeden string."""
     combined_text = ""
     for label_text, key in pola_do_wyswietlenia:
         entry = entry_widgets[label_text]
         combined_text += f"{label_text}: {entry.get()}\n"
     return combined_text
 
+# --- Konfiguracja głównego okna Tkinter ---
 
-# Konfiguracja głównego okna Tkinter
 root = tk.Tk()
 root.title("Baza Internetowa REGON")
 
 main_frame = tk.Frame(root)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-# --- Lewa kolumna (Inputy z danymi) ---
+# Lewa kolumna (Inputy z danymi)
 left_frame = tk.Frame(main_frame)
 left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
 
@@ -241,7 +271,8 @@ pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF",
                            command=lambda: export_to_pdf_from_widget(combine_entry_data(), f"REGON_Raport_{nip_entry.get().strip()}"))
 pdf_all_button.pack(pady=10)
 
-# --- Prawa kolumna (nowe okno do kopiowania/edycji) ---
+
+# Prawa kolumna (nowe okno do kopiowania/edycji)
 right_frame = tk.Frame(main_frame)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
@@ -255,6 +286,22 @@ selected_data_text.config(font=("Courier New", 10))
 pdf_selected_button = tk.Button(right_frame, text="Drukuj do PDF wybrane", 
                                 command=lambda: export_to_pdf_from_widget(selected_data_text.get(1.0, tk.END), "Wybrany_Raport_REGON"))
 pdf_selected_button.pack(pady=10)
+
+
+# --- NOWA SEKCJA HISTORIA ---
+history_frame = tk.Frame(root)
+history_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+
+history_label = tk.Label(history_frame, text="Historia wyszukiwania (NIP | Nazwa firmy):")
+history_label.pack()
+
+history_text = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, width=60, height=5, padx=5, pady=5)
+history_text.pack(fill=tk.BOTH, expand=True)
+history_text.config(state=tk.DISABLED, font=("Courier New", 10))
+
+
+# Wczytaj historię po starcie aplikacji
+load_history()
 
 # Uruchomienie pętli głównej Tkinter
 root.mainloop()
