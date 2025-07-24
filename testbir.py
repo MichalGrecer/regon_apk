@@ -19,11 +19,11 @@ class PDF(FPDF):
 
 def pobierz_dane_gus_gui(nip):
     """
-    Pobiera dane firmy z GUS na podstawie numeru NIP i zwraca sformatowany tekst.
+    Pobiera dane firmy z GUS na podstawie numeru NIP i zwraca słownik.
     """
     klucz_uzytkownika = "abcde12345abcde12345"
     klient = None
-    wyniki_do_wyswietlenia = []
+    dane_do_raportu = {}
 
     try:
         service_url = "https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
@@ -33,11 +33,10 @@ def pobierz_dane_gus_gui(nip):
 
         wynik_wyszukiwania = klient.search(nip=nip, detailed=True)
         if not wynik_wyszukiwania:
-            wyniki_do_wyswietlenia.append(f"Nie znaleziono podmiotu dla NIPu: {nip}")
-            return "\n".join(wyniki_do_wyswietlenia)
+            messagebox.showwarning("Brak danych", f"Nie znaleziono podmiotu dla NIPu: {nip}")
+            return None
 
         glowny_element_odpowiedzi = wynik_wyszukiwania[0]
-        dane_do_raportu = {}
         
         dane_do_raportu['Regon'] = getattr(glowny_element_odpowiedzi, 'Regon', None)
         dane_do_raportu['Typ'] = getattr(glowny_element_odpowiedzi, 'Typ', None)
@@ -60,31 +59,12 @@ def pobierz_dane_gus_gui(nip):
                 dane_do_raportu['Informacja o skreśleniu z REGON'] = "----------"
         else:
             dane_do_raportu['Informacja o skreśleniu z REGON'] = "----------"
-
-        pola_do_wyswietlenia = [
-            ("Regon", "Regon"),
-            ("Typ", "Typ"),
-            ("Nazwa", "Nazwa"),
-            ("Województwo", "Wojewodztwo"),
-            ("Powiat", "Powiat"),
-            ("Gmina", "Gmina"),
-            ("Kod pocztowy", "KodPocztowy"),
-            ("Miejscowość", "Miejscowosc"),
-            ("Ulica", "Ulica"),
-            ("Informacja o skreśleniu z REGON", "Informacja o skreśleniu z REGON")
-        ]
-
-        max_label_len = max(len(label) for label, _ in pola_do_wyswietlenia)
         
-        for label, key in pola_do_wyswietlenia:
-            value = str(dane_do_raportu.get(key, "")).strip()
-            wyniki_do_wyswietlenia.append(f"{label.ljust(max_label_len)} {value}")
-        
-        return "\n".join(wyniki_do_wyswietlenia)
+        return dane_do_raportu
 
     except Exception as e:
-        message = f"Wystąpił błąd: {e}"
-        return message
+        messagebox.showerror("Błąd", f"Wystąpił błąd: {e}")
+        return None
 
     finally:
         try:
@@ -97,10 +77,8 @@ def get_current_date():
     """Pobiera aktualną datę w formacie DD-MM-YYYY."""
     return date.today().strftime("%d-%m-%Y")
 
-def export_to_pdf_from_widget(text_widget, initial_filename_prefix):
-    """Eksportuje dane z podanego widgetu tekstowego do pliku PDF."""
-    content = text_widget.get(1.0, tk.END)
-
+def export_to_pdf_from_widget(content, initial_filename_prefix):
+    """Eksportuje podany tekst do pliku PDF."""
     if not content.strip():
         messagebox.showwarning("Błąd", "Brak danych do wyeksportowania do PDF.")
         return
@@ -135,6 +113,44 @@ def export_to_pdf_from_widget(text_widget, initial_filename_prefix):
         except Exception as e:
             messagebox.showerror("Błąd zapisu PDF", f"Nie udało się zapisać pliku PDF: {e}")
 
+# Globalna zmienna do obsługi Drag&Drop
+drag_data = {'text': None}
+
+def on_drag_start(event, source_entry):
+    """Zdarzenie uruchamiane po kliknięciu na pole Entry."""
+    drag_data['text'] = f"{entry_labels[source_entry]}: {source_entry.get()}"
+    root.config(cursor="hand2")
+    root.bind('<ButtonRelease-1>', on_drop_global)
+    root.bind('<Motion>', on_drag_motion_global)
+
+def on_drag_motion_global(event):
+    """Utrzymuje kursor "hand2" na całym oknie podczas przeciągania."""
+    pass
+
+def on_drop_global(event):
+    """Globalna funkcja, która wywoła się po zwolnieniu przycisku myszy."""
+    root.config(cursor="arrow")
+    
+    if drag_data['text']:
+        x_root, y_root = event.x_root, event.y_root
+        widget = root.winfo_containing(x_root, y_root)
+        
+        if widget and widget == selected_data_text:
+            x_rel = x_root - selected_data_text.winfo_rootx()
+            y_rel = y_root - selected_data_text.winfo_rooty()
+            
+            try:
+                index = selected_data_text.index(f"@{x_rel},{y_rel}")
+                # Dodajemy znak nowej linii, aby każdy wpis był w nowym wierszu
+                selected_data_text.insert(index, drag_data['text'] + "\n")
+            except tk.TclError:
+                selected_data_text.insert(tk.END, drag_data['text'] + "\n")
+        
+        drag_data['text'] = None
+        
+    root.unbind('<ButtonRelease-1>')
+    root.unbind('<Motion>')
+
 def on_search_button_click():
     """Funkcja wywoływana po kliknięciu przycisku 'Szukaj'."""
     nip_do_szukania = nip_entry.get().strip()
@@ -142,16 +158,30 @@ def on_search_button_click():
         messagebox.showwarning("Błąd", "Proszę wprowadzić numer NIP.")
         return
 
-    # Ustawiamy stan na NORMAL, żeby móc edytować
-    output_text.config(state=tk.NORMAL)
-    output_text.delete(1.0, tk.END)
-    output_text.insert(tk.END, f"Stan danych na dzień: {get_current_date()}\n\n") 
+    dane = pobierz_dane_gus_gui(nip_do_szukania)
+    if dane:
+        for label_text, key in pola_do_wyswietlenia:
+            entry = entry_widgets[label_text]
+            entry.config(state=tk.NORMAL)
+            entry.delete(0, tk.END)
+            value = str(dane.get(key, "")).strip()
+            entry.insert(0, value)
+            entry.config(state='readonly')
+    else:
+        for label_text, key in pola_do_wyswietlenia:
+            entry = entry_widgets[label_text]
+            entry.config(state=tk.NORMAL)
+            entry.delete(0, tk.END)
+            entry.config(state='readonly')
 
-    wynik_pobierania = pobierz_dane_gus_gui(nip_do_szukania)
-    output_text.insert(tk.END, wynik_pobierania)
 
-    # Ustawiamy stan z powrotem na DISABLED, żeby zablokować edycję
-    output_text.config(state=tk.DISABLED)
+def combine_entry_data():
+    """Zbiera dane ze wszystkich pól Entry i formatuje je w jeden string."""
+    combined_text = ""
+    for label_text, key in pola_do_wyswietlenia:
+        entry = entry_widgets[label_text]
+        combined_text += f"{label_text}: {entry.get()}\n"
+    return combined_text
 
 
 # Konfiguracja głównego okna Tkinter
@@ -161,9 +191,9 @@ root.title("Baza Internetowa REGON")
 main_frame = tk.Frame(root)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-# --- Lewa kolumna ---
+# --- Lewa kolumna (Inputy z danymi) ---
 left_frame = tk.Frame(main_frame)
-left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
 
 input_frame = tk.Frame(left_frame, padx=10, pady=10)
 input_frame.pack(padx=5, pady=5, fill=tk.X)
@@ -178,19 +208,44 @@ nip_entry.insert(0, "5261040828")
 search_button = tk.Button(input_frame, text="Szukaj", command=on_search_button_click)
 search_button.pack(side=tk.LEFT, padx=(10, 0))
 
-output_text = scrolledtext.ScrolledText(left_frame, wrap=tk.WORD, width=60, height=15, padx=10, pady=10)
-output_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
-output_text.config(font=("Courier New", 10), state=tk.DISABLED) # Początkowy stan DISABLED
+data_frame = tk.Frame(left_frame, padx=10, pady=10)
+data_frame.pack(fill=tk.BOTH, expand=True)
+
+pola_do_wyswietlenia = [
+    ("Regon", "Regon"), ("Typ", "Typ"), ("Nazwa", "Nazwa"),
+    ("Województwo", "Wojewodztwo"), ("Powiat", "Powiat"),
+    ("Gmina", "Gmina"), ("Kod pocztowy", "KodPocztowy"),
+    ("Miejscowość", "Miejscowosc"), ("Ulica", "Ulica"),
+    ("Informacja o skreśleniu z REGON", "Informacja o skreśleniu z REGON")
+]
+entry_widgets = {}
+entry_labels = {}
+
+for label_text, key in pola_do_wyswietlenia:
+    row_frame = tk.Frame(data_frame)
+    row_frame.pack(fill=tk.X, pady=2)
+    
+    lbl = tk.Label(row_frame, text=f"{label_text}:", width=25, anchor="w")
+    lbl.pack(side=tk.LEFT)
+    
+    ent = tk.Entry(row_frame, width=30, readonlybackground="lightgray")
+    ent.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+    ent.config(state='readonly')
+    
+    ent.bind('<Button-1>', lambda event, entry=ent: on_drag_start(event, entry))
+
+    entry_widgets[label_text] = ent
+    entry_labels[ent] = label_text
 
 pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF", 
-                           command=lambda: export_to_pdf_from_widget(output_text, f"REGON_Raport_{nip_entry.get().strip()}"))
+                           command=lambda: export_to_pdf_from_widget(combine_entry_data(), f"REGON_Raport_{nip_entry.get().strip()}"))
 pdf_all_button.pack(pady=10)
 
-# --- Prawa kolumna ---
+# --- Prawa kolumna (nowe okno do kopiowania/edycji) ---
 right_frame = tk.Frame(main_frame)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
-selected_data_label = tk.Label(right_frame, text="Wybrane dane do wydruku (edycja/wklejanie):")
+selected_data_label = tk.Label(right_frame, text="Wybrane dane do wydruku (przeciągnij tutaj):")
 selected_data_label.pack(pady=(10, 5))
 
 selected_data_text = scrolledtext.ScrolledText(right_frame, wrap=tk.WORD, width=60, height=15, padx=10, pady=10)
@@ -198,7 +253,7 @@ selected_data_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
 selected_data_text.config(font=("Courier New", 10))
 
 pdf_selected_button = tk.Button(right_frame, text="Drukuj do PDF wybrane", 
-                                command=lambda: export_to_pdf_from_widget(selected_data_text, "Wybrany_Raport_REGON"))
+                                command=lambda: export_to_pdf_from_widget(selected_data_text.get(1.0, tk.END), "Wybrany_Raport_REGON"))
 pdf_selected_button.pack(pady=10)
 
 # Uruchomienie pętli głównej Tkinter
