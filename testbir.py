@@ -5,6 +5,7 @@ from tkinter import messagebox, scrolledtext, filedialog
 from datetime import date
 from fpdf import FPDF
 
+# Klasa dla generatora PDF
 class PDF(FPDF):
     def header(self):
         self.set_font('DejaVuSansCondensed', 'B', 12)
@@ -26,7 +27,7 @@ def pobierz_dane_gus_gui(nip):
 
     try:
         service_url = "https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
-        # service_url = "https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc" # Adres produkcyjny
+        # service_url = "https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
         klient = regon.REGONAPI(service_url)
         klient.login(klucz_uzytkownika)
 
@@ -96,9 +97,9 @@ def get_current_date():
     """Pobiera aktualną datę w formacie DD-MM-YYYY."""
     return date.today().strftime("%d-%m-%Y")
 
-def export_to_pdf():
-    """Eksportuje wyświetlone dane do pliku PDF."""
-    content = output_text.get(1.0, tk.END)
+def export_to_pdf_from_widget(text_widget, initial_filename_prefix):
+    """Eksportuje dane z podanego widgetu tekstowego do pliku PDF."""
+    content = text_widget.get(1.0, tk.END)
 
     if not content.strip():
         messagebox.showwarning("Błąd", "Brak danych do wyeksportowania do PDF.")
@@ -107,14 +108,13 @@ def export_to_pdf():
     file_path = filedialog.asksaveasfilename(
         defaultextension=".pdf",
         filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
-        initialfile=f"REGON_Raport_{nip_entry.get().strip()}_{get_current_date()}.pdf"
+        initialfile=f"{initial_filename_prefix}_{get_current_date()}.pdf"
     )
 
     if file_path:
         pdf = PDF()
         pdf.alias_nb_pages()
         
-        # Plik czcionki DejaVuSansCondensed.ttf musi znajdować się w tym samym katalogu co skrypt
         try:
             pdf.add_font('DejaVuSansCondensed', '', 'DejaVuSansCondensed.ttf')
             pdf.add_font('DejaVuSansCondensed', 'B', 'DejaVuSansCondensed.ttf')
@@ -142,18 +142,30 @@ def on_search_button_click():
         messagebox.showwarning("Błąd", "Proszę wprowadzić numer NIP.")
         return
 
+    # Ustawiamy stan na NORMAL, żeby móc edytować
+    output_text.config(state=tk.NORMAL)
     output_text.delete(1.0, tk.END)
     output_text.insert(tk.END, f"Stan danych na dzień: {get_current_date()}\n\n") 
 
     wynik_pobierania = pobierz_dane_gus_gui(nip_do_szukania)
     output_text.insert(tk.END, wynik_pobierania)
 
+    # Ustawiamy stan z powrotem na DISABLED, żeby zablokować edycję
+    output_text.config(state=tk.DISABLED)
+
 
 # Konfiguracja głównego okna Tkinter
 root = tk.Tk()
 root.title("Baza Internetowa REGON")
 
-input_frame = tk.Frame(root, padx=10, pady=10)
+main_frame = tk.Frame(root)
+main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+# --- Lewa kolumna ---
+left_frame = tk.Frame(main_frame)
+left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+input_frame = tk.Frame(left_frame, padx=10, pady=10)
 input_frame.pack(padx=5, pady=5, fill=tk.X)
 
 nip_label = tk.Label(input_frame, text="NIP:")
@@ -166,11 +178,28 @@ nip_entry.insert(0, "5261040828")
 search_button = tk.Button(input_frame, text="Szukaj", command=on_search_button_click)
 search_button.pack(side=tk.LEFT, padx=(10, 0))
 
-output_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=60, height=15, padx=10, pady=10)
+output_text = scrolledtext.ScrolledText(left_frame, wrap=tk.WORD, width=60, height=15, padx=10, pady=10)
 output_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
-output_text.config(font=("Courier New", 10))
+output_text.config(font=("Courier New", 10), state=tk.DISABLED) # Początkowy stan DISABLED
 
-pdf_button = tk.Button(root, text="Pobierz do PDF", command=export_to_pdf)
-pdf_button.pack(pady=10)
+pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF", 
+                           command=lambda: export_to_pdf_from_widget(output_text, f"REGON_Raport_{nip_entry.get().strip()}"))
+pdf_all_button.pack(pady=10)
 
+# --- Prawa kolumna ---
+right_frame = tk.Frame(main_frame)
+right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+
+selected_data_label = tk.Label(right_frame, text="Wybrane dane do wydruku (edycja/wklejanie):")
+selected_data_label.pack(pady=(10, 5))
+
+selected_data_text = scrolledtext.ScrolledText(right_frame, wrap=tk.WORD, width=60, height=15, padx=10, pady=10)
+selected_data_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
+selected_data_text.config(font=("Courier New", 10))
+
+pdf_selected_button = tk.Button(right_frame, text="Drukuj do PDF wybrane", 
+                                command=lambda: export_to_pdf_from_widget(selected_data_text, "Wybrany_Raport_REGON"))
+pdf_selected_button.pack(pady=10)
+
+# Uruchomienie pętli głównej Tkinter
 root.mainloop()
