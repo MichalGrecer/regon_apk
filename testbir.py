@@ -190,12 +190,11 @@ def on_search_button_click():
             entry.insert(0, value)
             entry.config(state='readonly')
         
-        # --- NOWA FUNKCJONALNOŚĆ HISTORII ---
         nazwa_firmy = dane.get('Nazwa', 'Brak nazwy')
         historia_wpis = f"{nip_do_szukania} | {nazwa_firmy}"
         if historia_wpis not in search_history:
             search_history.append(historia_wpis)
-            if len(search_history) > 20: # Ograniczanie historii do np. 20 wpisów
+            if len(search_history) > 20: 
                 search_history.pop(0)
             update_history_display()
             save_history()
@@ -212,6 +211,23 @@ def combine_entry_data():
         entry = entry_widgets[label_text]
         combined_text += f"{label_text}: {entry.get()}\n"
     return combined_text
+
+# --- NOWE FUNKCJE CZYSZCZENIA PANELI ---
+def clear_left_panel():
+    """Czyści wszystkie pola tekstowe w lewym panelu."""
+    for label_text, key in pola_do_wyswietlenia:
+        entry = entry_widgets[label_text]
+        entry.config(state=tk.NORMAL)
+        entry.delete(0, tk.END)
+        entry.config(state='readonly')
+    nip_entry.delete(0, tk.END)
+    messagebox.showinfo("Sukces", "Dane w lewym panelu zostały wyczyszczone.")
+
+def clear_right_panel():
+    """Czyści całą zawartość prawego pola tekstowego."""
+    selected_data_text.delete(1.0, tk.END)
+    messagebox.showinfo("Sukces", "Prawy panel został wyczyszczony.")
+
 
 # --- Konfiguracja głównego okna Tkinter ---
 
@@ -269,7 +285,11 @@ for label_text, key in pola_do_wyswietlenia:
 
 pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF", 
                            command=lambda: export_to_pdf_from_widget(combine_entry_data(), f"REGON_Raport_{nip_entry.get().strip()}"))
-pdf_all_button.pack(pady=10)
+pdf_all_button.pack(pady=(10, 5))
+
+# Przycisk do czyszczenia lewego panelu
+clear_left_button = tk.Button(left_frame, text="Wyczyść dane", command=clear_left_panel)
+clear_left_button.pack(pady=(0, 10))
 
 
 # Prawa kolumna (nowe okno do kopiowania/edycji)
@@ -285,10 +305,14 @@ selected_data_text.config(font=("Courier New", 10))
 
 pdf_selected_button = tk.Button(right_frame, text="Drukuj do PDF wybrane", 
                                 command=lambda: export_to_pdf_from_widget(selected_data_text.get(1.0, tk.END), "Wybrany_Raport_REGON"))
-pdf_selected_button.pack(pady=10)
+pdf_selected_button.pack(pady=(10, 5))
+
+# Przycisk do czyszczenia prawego panelu
+clear_right_button = tk.Button(right_frame, text="Wyczyść wybrane", command=clear_right_panel)
+clear_right_button.pack(pady=(0, 10))
 
 
-# --- NOWA SEKCJA HISTORIA ---
+# --- SEKCJA HISTORIA ---
 history_frame = tk.Frame(root)
 history_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
