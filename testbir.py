@@ -138,8 +138,8 @@ def update_history_display():
 # --- Funkcje obsługi GUI i zdarzeń ---
 
 drag_data = {'text': None}
-is_uppercase = False # Dodana zmienna stanu
-original_data = {} # Słownik do przechowywania danych w oryginalnym formacie
+is_uppercase = False
+original_data = {}
 
 def on_drag_start(event, source_entry):
     label_text = entry_labels[source_entry]
@@ -188,18 +188,16 @@ def on_search_button_click():
 
     dane = pobierz_dane_gus_gui(nip_do_szukania)
     if dane:
-        # Resetowanie stanu checkboxów
+        
         address_combine_var.set(False)
         zip_city_combine_var.set(False)
-
-        # Przywracanie widoczności ukrytych pól (jeśli były ukryte)
+        
         entry_frames['Numer Nieruchomości'].grid()
         entry_frames['Miejscowość'].grid()
 
-        # Przechowywanie danych w oryginalnym formacie
         for label_text, key in pola_do_wyswietlenia:
             value = str(dane.get(key, "")).strip()
-            original_data[label_text] = value # Zapisujemy oryginalne dane
+            original_data[label_text] = value
             entry = entry_widgets[label_text]
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
@@ -215,7 +213,6 @@ def on_search_button_click():
             update_history_display()
             save_history()
         
-        # Resetowanie stanu wielkich liter
         is_uppercase = False
         uppercase_button.config(text="A/a")
         
@@ -225,7 +222,7 @@ def on_search_button_click():
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
             entry.config(state='readonly')
-        # Przywracanie widoczności ukrytych pól (nawet jeśli wyszukiwanie nieudane)
+            
         entry_frames['Numer Nieruchomości'].grid()
         entry_frames['Miejscowość'].grid()
 
@@ -234,7 +231,6 @@ def combine_entry_data():
     """Generuje tekst do wydruku PDF z danymi z lewego panelu, w zależności od stanu 'is_uppercase'."""
     combined_text = ""
     for label_text, key in pola_do_wyswietlenia:
-        # Sprawdzamy, czy ramka pola jest widoczna, aby nie drukować ukrytych pól
         if entry_frames[label_text].winfo_ismapped():
             entry_value = entry_widgets[label_text].get()
             if is_uppercase:
@@ -252,13 +248,12 @@ def clear_left_panel():
         entry.config(state='readonly')
         entry_labels_widget[label_text].config(text=label_text + ":")
     nip_entry.delete(0, tk.END)
-    # Resetowanie stanu checkboxów i przywracanie widoczności pól
+    
     address_combine_var.set(False)
     zip_city_combine_var.set(False)
     entry_frames['Numer Nieruchomości'].grid()
     entry_frames['Miejscowość'].grid()
     
-    # Resetowanie stanu wielkich liter
     is_uppercase = False
     uppercase_button.config(text="A/a")
 
@@ -284,11 +279,11 @@ def combine_address_logic():
     ulica_entry.delete(0, tk.END)
     ulica_entry.insert(0, combined_text)
     
-    nr_budynku_entry.delete(0, tk.END) # Czyścimy numer budynku po połączeniu
+    nr_budynku_entry.delete(0, tk.END)
     
     ulica_entry.config(state='readonly')
     nr_budynku_entry.config(state='readonly')
-    entry_frames['Numer Nieruchomości'].grid_remove() # Ukrywamy ramkę
+    entry_frames['Numer Nieruchomości'].grid_remove()
 
 def split_address_logic():
     ulica_entry = entry_widgets["Ulica"]
@@ -307,11 +302,11 @@ def split_address_logic():
         ulica_entry.insert(0, parts[0])
         nr_budynku_entry.insert(0, parts[1])
     else:
-        ulica_entry.insert(0, ulica_val) # Jeśli nie udało się rozdzielić, zostawiamy jak było
+        ulica_entry.insert(0, ulica_val)
     
     ulica_entry.config(state='readonly')
     nr_budynku_entry.config(state='readonly')
-    entry_frames['Numer Nieruchomości'].grid() # Pokazujemy ramkę
+    entry_frames['Numer Nieruchomości'].grid()
 
 def combine_zip_city_logic():
     kod_pocztowy_entry = entry_widgets["Kod pocztowy"]
@@ -327,11 +322,11 @@ def combine_zip_city_logic():
     kod_pocztowy_entry.delete(0, tk.END)
     kod_pocztowy_entry.insert(0, combined_text)
     
-    miejscowosc_entry.delete(0, tk.END) # Czyścimy miejscowość po połączeniu
+    miejscowosc_entry.delete(0, tk.END)
     
     kod_pocztowy_entry.config(state='readonly')
     miejscowosc_entry.config(state='readonly')
-    entry_frames['Miejscowość'].grid_remove() # Ukrywamy ramkę
+    entry_frames['Miejscowość'].grid_remove()
 
 def split_zip_city_logic():
     kod_pocztowy_entry = entry_widgets["Kod pocztowy"]
@@ -350,11 +345,11 @@ def split_zip_city_logic():
         kod_pocztowy_entry.insert(0, parts[0])
         miejscowosc_entry.insert(0, parts[1])
     else:
-        kod_pocztowy_entry.insert(0, kod_pocztowy_val) # Jeśli nie udało się rozdzielić, zostawiamy jak było
+        kod_pocztowy_entry.insert(0, kod_pocztowy_val)
     
     kod_pocztowy_entry.config(state='readonly')
     miejscowosc_entry.config(state='readonly')
-    entry_frames['Miejscowość'].grid() # Pokazujemy ramkę
+    entry_frames['Miejscowość'].grid()
 
 def handle_address_checkbox():
     if address_combine_var.get():
@@ -396,14 +391,14 @@ def toggle_case():
     ]
 
     if is_uppercase:
-        # Zmiana na domyślne (z oryginalnych danych)
+        
         for label_text, entry in entry_widgets.items():
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
             entry.insert(0, original_data.get(label_text, ""))
             entry.config(state='readonly')
         
-        # Zmiana tekstu etykiet
+
         for label_text in labels_to_change:
             entry_labels_widget[label_text].config(text=label_text + ":")
 
@@ -421,7 +416,6 @@ def toggle_case():
             entry.insert(0, uppercase_text)
             entry.config(state='readonly')
         
-        # Zmiana tekstu etykiet
         for label_text in labels_to_change:
             uppercase_label = label_text.upper() + ":"
             entry_labels_widget[label_text].config(text=uppercase_label)
@@ -491,7 +485,6 @@ for i, (label_text, key) in enumerate(pola_do_wyswietlenia):
     
     ent.bind('<Button-1>', lambda event, entry=ent: on_drag_start(event, entry))
     
-    # Dodanie przycisku 'A/a' obok pola Regon
     if label_text == "Regon":
         uppercase_button = tk.Button(row_frame, text="A/a", command=toggle_case)
         uppercase_button.pack(side=tk.LEFT, padx=(5, 0))
@@ -506,7 +499,7 @@ for i, (label_text, key) in enumerate(pola_do_wyswietlenia):
     entry_widgets[label_text] = ent
     entry_labels[ent] = label_text
     entry_frames[label_text] = row_frame
-    entry_labels_widget[label_text] = lbl # Zapisujemy odnośnik do widgetu etykiety
+    entry_labels_widget[label_text] = lbl
 
 pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF", 
                            command=lambda: export_to_pdf_from_widget(combine_entry_data(), f"REGON_Raport_{nip_entry.get().strip()}"))
@@ -546,8 +539,5 @@ history_text.config(state=tk.DISABLED, font=("Courier New", 10))
 
 history_text.bind("<Double-Button-1>", load_nip_from_history)
 
-# Wczytaj historię po starcie aplikacji
 load_history()
-
-# Uruchomienie pętli głównej Tkinter
 root.mainloop()
