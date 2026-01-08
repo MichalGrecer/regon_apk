@@ -16,6 +16,25 @@ A desktop application written in Python designed to automate the retrieval of co
     * Toggle letter case (Uppercase/Original).
 * **Security:** The API key is not hardcoded. The application prompts for it upon the first launch and saves it securely in a local file.
 
+## 📸 Application Overview
+
+### 1. Data Retrieval & Formatting
+Enter a NIP number to instantly fetch company details. The interface allows you to merge address fields (Street + Number) or toggle letter casing (A/a) for better readability.
+
+![Main Interface](docs/screenshots/gus-regon2.png)
+
+### 2. Drag & Drop Report Builder
+Need a specific report? Simply drag and drop the desired fields from the left panel into the editor on the right to create a custom compilation.
+
+![Drag and Drop Feature](docs/screenshots/gus-regon4.png)
+
+### 3. PDF Generation
+Export the full dataset or your custom selection to a clean, formatted PDF file with full support for Polish characters.
+
+![PDF Report](docs/screenshots/gus-regon6.png)
+
+---
+
 ## 🛠️ Requirements & Installation
 
 ### 1. Prerequisites
