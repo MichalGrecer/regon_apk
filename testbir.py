@@ -5,7 +5,7 @@ from tkinter import messagebox, scrolledtext, filedialog, simpledialog
 from datetime import date
 from fpdf import FPDF
 import os
-import sys
+import sys # Dodano sys do czystego zamykania
 
 # --- Konfiguracja i stałe ---
 
@@ -25,6 +25,7 @@ def get_api_key():
         except Exception:
             pass 
 
+    # Okno dialogowe pojawi się na środku, nawet jak główne okno jest ukryte
     key = simpledialog.askstring("Weryfikacja", "Wprowadź klucz API REGON, aby uruchomić program:")
     
     if key:
@@ -36,7 +37,7 @@ def get_api_key():
             messagebox.showerror("Błąd", f"Nie udało się zapisać klucza API: {e}")
             return None
     else:
-        return None
+        return None # Użytkownik kliknął Anuluj
 
 def reset_api_key():
     """Usuwa plik z kluczem."""
@@ -102,6 +103,7 @@ def export_to_pdf_from_widget(content, initial_filename_prefix):
 # --- Funkcje pobierania danych GUS ---
 
 def pobierz_dane_gus_gui(nip):
+    # Tutaj też pobieramy klucz (na wypadek gdyby został usunięty w trakcie działania)
     klucz_uzytkownika = get_api_key()
     
     if not klucz_uzytkownika:
@@ -171,6 +173,7 @@ def save_history():
             f.write(entry + "\n")
 
 def load_history():
+    # Funkcja teraz tylko ładuje dane, nie wywołuje się sama na starcie
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             for line in f:
@@ -185,6 +188,7 @@ def update_history_display():
     history_text.config(state=tk.DISABLED)
 
 # --- Funkcje obsługi GUI ---
+# (Reszta funkcji logicznych bez zmian: drag&drop, combine, split itp.)
 
 drag_data = {'text': None}
 is_uppercase = False 
