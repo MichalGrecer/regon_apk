@@ -1,12 +1,55 @@
 import litex.regon as regon
 import lxml.etree
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, filedialog
+from tkinter import messagebox, scrolledtext, filedialog, simpledialog
 from datetime import date
 from fpdf import FPDF
 import os
+import sys
 
-# --- Konfiguracja i funkcje PDF ---
+# --- Konfiguracja i stałe ---
+
+KEY_FILE = "api_key.txt"
+HISTORY_FILE = "historia_regon.txt"
+
+# --- Funkcje obsługi Klucza API ---
+
+def get_api_key():
+    """Pobiera klucz z pliku lub pyta użytkownika. Zwraca None, jeśli anulowano."""
+    if os.path.exists(KEY_FILE):
+        try:
+            with open(KEY_FILE, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+                if key:
+                    return key
+        except Exception:
+            pass 
+
+    key = simpledialog.askstring("Weryfikacja", "Wprowadź klucz API REGON, aby uruchomić program:")
+    
+    if key:
+        try:
+            with open(KEY_FILE, "w", encoding="utf-8") as f:
+                f.write(key.strip())
+            return key.strip()
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Nie udało się zapisać klucza API: {e}")
+            return None
+    else:
+        return None
+
+def reset_api_key():
+    """Usuwa plik z kluczem."""
+    if os.path.exists(KEY_FILE):
+        try:
+            os.remove(KEY_FILE)
+            messagebox.showinfo("Sukces", "Klucz usunięty. Przy kolejnym uruchomieniu aplikacja poprosi o nowy klucz.")
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Nie można usunąć pliku klucza: {e}")
+    else:
+        messagebox.showinfo("Info", "Brak zapisanego klucza API.")
+
+# --- Funkcje PDF ---
 
 class PDF(FPDF):
     def header(self):
@@ -42,7 +85,7 @@ def export_to_pdf_from_widget(content, initial_filename_prefix):
             pdf.add_font('DejaVuSansCondensed', 'I', 'DejaVuSansCondensed.ttf')
             pdf.set_font('DejaVuSansCondensed', '', 10)
         except RuntimeError as e:
-            messagebox.showerror("Błąd czcionki", f"Nie można załadować czcionki DejaVuSansCondensed.ttf. Upewnij się, że plik jest w tym samym katalogu co skrypt: {e}")
+            messagebox.showerror("Błąd czcionki", f"Nie można załadować czcionki DejaVuSansCondensed.ttf. {e}")
             return
         
         pdf.add_page()
@@ -59,12 +102,16 @@ def export_to_pdf_from_widget(content, initial_filename_prefix):
 # --- Funkcje pobierania danych GUS ---
 
 def pobierz_dane_gus_gui(nip):
-    klucz_uzytkownika = "abcde12345abcde12345"
+    klucz_uzytkownika = get_api_key()
+    
+    if not klucz_uzytkownika:
+        return None
+
     klient = None
     dane_do_raportu = {}
 
     try:
-        service_url = "https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
+        service_url = "https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
         klient = regon.REGONAPI(service_url)
         klient.login(klucz_uzytkownika)
 
@@ -101,7 +148,10 @@ def pobierz_dane_gus_gui(nip):
         return dane_do_raportu
 
     except Exception as e:
-        messagebox.showerror("Błąd", f"Wystąpił błąd: {e}")
+        if "Authentication failed" in str(e) or "403" in str(e):
+             messagebox.showerror("Błąd autoryzacji", f"Klucz API jest niepoprawny lub wygasł.\nBłąd: {e}")
+        else:
+            messagebox.showerror("Błąd", f"Wystąpił błąd: {e}")
         return None
 
     finally:
@@ -113,7 +163,6 @@ def pobierz_dane_gus_gui(nip):
 
 # --- Funkcje obsługi historii ---
 
-HISTORY_FILE = "historia_regon.txt"
 search_history = []
 
 def save_history():
@@ -135,21 +184,19 @@ def update_history_display():
         history_text.insert(tk.END, entry + "\n")
     history_text.config(state=tk.DISABLED)
 
-# --- Funkcje obsługi GUI i zdarzeń ---
+# --- Funkcje obsługi GUI ---
 
 drag_data = {'text': None}
-is_uppercase = False # Dodana zmienna stanu
-original_data = {} # Słownik do przechowywania danych w oryginalnym formacie
+is_uppercase = False 
+original_data = {} 
 
 def on_drag_start(event, source_entry):
     label_text = entry_labels[source_entry]
     value = source_entry.get()
-
     if is_uppercase:
         drag_data['text'] = f"{label_text.upper()}: {value.upper()}"
     else:
         drag_data['text'] = f"{label_text}: {value}"
-
     root.config(cursor="hand2")
     root.bind('<ButtonRelease-1>', on_drop_global)
     root.bind('<Motion>', on_drag_motion_global)
@@ -159,23 +206,18 @@ def on_drag_motion_global(event):
 
 def on_drop_global(event):
     root.config(cursor="arrow")
-    
     if drag_data['text']:
         x_root, y_root = event.x_root, event.y_root
         widget = root.winfo_containing(x_root, y_root)
-        
         if widget and widget == selected_data_text:
             x_rel = x_root - selected_data_text.winfo_rootx()
             y_rel = y_root - selected_data_text.winfo_rooty()
-            
             try:
                 index = selected_data_text.index(f"@{x_rel},{y_rel}")
                 selected_data_text.insert(index, drag_data['text'] + "\n")
             except tk.TclError:
                 selected_data_text.insert(tk.END, drag_data['text'] + "\n")
-        
         drag_data['text'] = None
-        
     root.unbind('<ButtonRelease-1>')
     root.unbind('<Motion>')
 
@@ -188,18 +230,14 @@ def on_search_button_click():
 
     dane = pobierz_dane_gus_gui(nip_do_szukania)
     if dane:
-        # Resetowanie stanu checkboxów
         address_combine_var.set(False)
         zip_city_combine_var.set(False)
-
-        # Przywracanie widoczności ukrytych pól (jeśli były ukryte)
         entry_frames['Numer Nieruchomości'].grid()
         entry_frames['Miejscowość'].grid()
 
-        # Przechowywanie danych w oryginalnym formacie
         for label_text, key in pola_do_wyswietlenia:
             value = str(dane.get(key, "")).strip()
-            original_data[label_text] = value # Zapisujemy oryginalne dane
+            original_data[label_text] = value
             entry = entry_widgets[label_text]
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
@@ -215,26 +253,12 @@ def on_search_button_click():
             update_history_display()
             save_history()
         
-        # Resetowanie stanu wielkich liter
         is_uppercase = False
         uppercase_button.config(text="A/a")
-        
-    else:
-        for label_text, key in pola_do_wyswietlenia:
-            entry = entry_widgets[label_text]
-            entry.config(state=tk.NORMAL)
-            entry.delete(0, tk.END)
-            entry.config(state='readonly')
-        # Przywracanie widoczności ukrytych pól (nawet jeśli wyszukiwanie nieudane)
-        entry_frames['Numer Nieruchomości'].grid()
-        entry_frames['Miejscowość'].grid()
-
 
 def combine_entry_data():
-    """Generuje tekst do wydruku PDF z danymi z lewego panelu, w zależności od stanu 'is_uppercase'."""
     combined_text = ""
     for label_text, key in pola_do_wyswietlenia:
-        # Sprawdzamy, czy ramka pola jest widoczna, aby nie drukować ukrytych pól
         if entry_frames[label_text].winfo_ismapped():
             entry_value = entry_widgets[label_text].get()
             if is_uppercase:
@@ -252,109 +276,83 @@ def clear_left_panel():
         entry.config(state='readonly')
         entry_labels_widget[label_text].config(text=label_text + ":")
     nip_entry.delete(0, tk.END)
-    # Resetowanie stanu checkboxów i przywracanie widoczności pól
     address_combine_var.set(False)
     zip_city_combine_var.set(False)
     entry_frames['Numer Nieruchomości'].grid()
     entry_frames['Miejscowość'].grid()
-    
-    # Resetowanie stanu wielkich liter
     is_uppercase = False
     uppercase_button.config(text="A/a")
-
     messagebox.showinfo("Sukces", "Dane w lewym panelu zostały wyczyszczone.")
 
 def clear_right_panel():
     selected_data_text.delete(1.0, tk.END)
     messagebox.showinfo("Sukces", "Prawy panel został wyczyszczony.")
 
-# --- FUNKCJE OBSŁUGUJĄCE LOGIKĘ ŁĄCZENIA/ROZDZIELANIA ---
-
 def combine_address_logic():
     ulica_entry = entry_widgets["Ulica"]
     nr_budynku_entry = entry_widgets["Numer Nieruchomości"]
     ulica_val = ulica_entry.get().strip()
     nr_budynku_val = nr_budynku_entry.get().strip()
-    
     combined_text = f"{ulica_val} {nr_budynku_val}".strip()
-    
     ulica_entry.config(state=tk.NORMAL)
     nr_budynku_entry.config(state=tk.NORMAL)
-    
     ulica_entry.delete(0, tk.END)
     ulica_entry.insert(0, combined_text)
-    
-    nr_budynku_entry.delete(0, tk.END) # Czyścimy numer budynku po połączeniu
-    
+    nr_budynku_entry.delete(0, tk.END)
     ulica_entry.config(state='readonly')
     nr_budynku_entry.config(state='readonly')
-    entry_frames['Numer Nieruchomości'].grid_remove() # Ukrywamy ramkę
+    entry_frames['Numer Nieruchomości'].grid_remove()
 
 def split_address_logic():
     ulica_entry = entry_widgets["Ulica"]
     nr_budynku_entry = entry_widgets["Numer Nieruchomości"]
     ulica_val = ulica_entry.get().strip()
-    
-    parts = ulica_val.rsplit(' ', 1) # rsplit by splitować od prawej (dla adresów)
-    
+    parts = ulica_val.rsplit(' ', 1)
     ulica_entry.config(state=tk.NORMAL)
     ulica_entry.delete(0, tk.END)
-    
     nr_budynku_entry.config(state=tk.NORMAL)
     nr_budynku_entry.delete(0, tk.END)
-    
     if len(parts) == 2:
         ulica_entry.insert(0, parts[0])
         nr_budynku_entry.insert(0, parts[1])
     else:
-        ulica_entry.insert(0, ulica_val) # Jeśli nie udało się rozdzielić, zostawiamy jak było
-    
+        ulica_entry.insert(0, ulica_val)
     ulica_entry.config(state='readonly')
     nr_budynku_entry.config(state='readonly')
-    entry_frames['Numer Nieruchomości'].grid() # Pokazujemy ramkę
+    entry_frames['Numer Nieruchomości'].grid()
 
 def combine_zip_city_logic():
     kod_pocztowy_entry = entry_widgets["Kod pocztowy"]
     miejscowosc_entry = entry_widgets["Miejscowość"]
     kod_pocztowy_val = kod_pocztowy_entry.get().strip()
     miejscowosc_val = miejscowosc_entry.get().strip()
-    
     combined_text = f"{kod_pocztowy_val} {miejscowosc_val}".strip()
-    
     kod_pocztowy_entry.config(state=tk.NORMAL)
     miejscowosc_entry.config(state=tk.NORMAL)
-    
     kod_pocztowy_entry.delete(0, tk.END)
     kod_pocztowy_entry.insert(0, combined_text)
-    
-    miejscowosc_entry.delete(0, tk.END) # Czyścimy miejscowość po połączeniu
-    
+    miejscowosc_entry.delete(0, tk.END)
     kod_pocztowy_entry.config(state='readonly')
     miejscowosc_entry.config(state='readonly')
-    entry_frames['Miejscowość'].grid_remove() # Ukrywamy ramkę
+    entry_frames['Miejscowość'].grid_remove()
 
 def split_zip_city_logic():
     kod_pocztowy_entry = entry_widgets["Kod pocztowy"]
     miejscowosc_entry = entry_widgets["Miejscowość"]
     kod_pocztowy_val = kod_pocztowy_entry.get().strip()
-    
-    parts = kod_pocztowy_val.split(' ', 1) # split by splitować od lewej (dla kodów)
-    
+    parts = kod_pocztowy_val.split(' ', 1)
     kod_pocztowy_entry.config(state=tk.NORMAL)
     kod_pocztowy_entry.delete(0, tk.END)
-    
     miejscowosc_entry.config(state=tk.NORMAL)
     miejscowosc_entry.delete(0, tk.END)
-    
     if len(parts) == 2:
         kod_pocztowy_entry.insert(0, parts[0])
         miejscowosc_entry.insert(0, parts[1])
     else:
-        kod_pocztowy_entry.insert(0, kod_pocztowy_val) # Jeśli nie udało się rozdzielić, zostawiamy jak było
-    
+        kod_pocztowy_entry.insert(0, kod_pocztowy_val)
     kod_pocztowy_entry.config(state='readonly')
     miejscowosc_entry.config(state='readonly')
-    entry_frames['Miejscowość'].grid() # Pokazujemy ramkę
+    entry_frames['Miejscowość'].grid()
 
 def handle_address_checkbox():
     if address_combine_var.get():
@@ -368,77 +366,62 @@ def handle_zip_city_checkbox():
     else:
         split_zip_city_logic()
 
-# --- Nowa funkcja do ładowania NIP-u z historii ---
 def load_nip_from_history(event):
     try:
         index = history_text.index("@%s,%s" % (event.x, event.y))
         line_num = int(index.split('.')[0])
         line_content = history_text.get(f"{line_num}.0", f"{line_num}.end").strip()
-        
         if '|' in line_content:
             nip = line_content.split('|')[0].strip()
-            
             nip_entry.delete(0, tk.END)
             nip_entry.insert(0, nip)
             on_search_button_click()
-            
     except tk.TclError:
         pass
         
 def toggle_case():
-    """Przełącza między dużymi a domyślnymi literami w polach Entry i etykietach."""
     global is_uppercase
-    
     labels_to_change = [
         "Regon", "Typ", "Nazwa", "Województwo", "Powiat", "Gmina",
         "Kod pocztowy", "Miejscowość", "Ulica", "Numer Nieruchomości",
         "Informacja o skreśleniu z REGON"
     ]
-
     if is_uppercase:
-        # Zmiana na domyślne (z oryginalnych danych)
         for label_text, entry in entry_widgets.items():
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
             entry.insert(0, original_data.get(label_text, ""))
             entry.config(state='readonly')
-        
-        # Zmiana tekstu etykiet
         for label_text in labels_to_change:
             entry_labels_widget[label_text].config(text=label_text + ":")
-
         uppercase_button.config(text="A/a")
         is_uppercase = False
-        
     else:
-        # Zmiana na duże litery
         for label_text, entry in entry_widgets.items():
             current_text = entry.get()
             uppercase_text = current_text.upper()
-            
             entry.config(state=tk.NORMAL)
             entry.delete(0, tk.END)
             entry.insert(0, uppercase_text)
             entry.config(state='readonly')
-        
-        # Zmiana tekstu etykiet
         for label_text in labels_to_change:
             uppercase_label = label_text.upper() + ":"
             entry_labels_widget[label_text].config(text=uppercase_label)
-
         uppercase_button.config(text="a/A")
         is_uppercase = True
 
-# --- Konfiguracja głównego okna Tkinter ---
+# --- BUDOWANIE INTERFEJSU (WIDGETY) ---
 
 root = tk.Tk()
 root.title("Baza Internetowa REGON")
 root.geometry("1120x720")
 
+# --- KLUCZOWE: Ukrywamy okno od razu po utworzeniu ---
+root.withdraw() 
+
 main_frame = tk.Frame(root)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-# Lewa kolumna (Inputy z danymi)
 left_frame = tk.Frame(main_frame)
 left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
 
@@ -474,7 +457,6 @@ entry_labels = {}
 entry_frames = {}
 entry_labels_widget = {}
 
-# Checkbox variables
 address_combine_var = tk.BooleanVar()
 zip_city_combine_var = tk.BooleanVar()
 
@@ -488,14 +470,11 @@ for i, (label_text, key) in enumerate(pola_do_wyswietlenia):
     ent = tk.Entry(row_frame, width=30, readonlybackground="lightgray")
     ent.pack(side=tk.LEFT, fill=tk.X, expand=True)
     ent.config(state='readonly')
-    
     ent.bind('<Button-1>', lambda event, entry=ent: on_drag_start(event, entry))
     
-    # Dodanie przycisku 'A/a' obok pola Regon
     if label_text == "Regon":
         uppercase_button = tk.Button(row_frame, text="A/a", command=toggle_case)
         uppercase_button.pack(side=tk.LEFT, padx=(5, 0))
-
     if label_text == "Ulica":
         combine_checkbox = tk.Checkbutton(row_frame, variable=address_combine_var, command=handle_address_checkbox)
         combine_checkbox.pack(side=tk.LEFT, padx=(5, 0))
@@ -506,7 +485,7 @@ for i, (label_text, key) in enumerate(pola_do_wyswietlenia):
     entry_widgets[label_text] = ent
     entry_labels[ent] = label_text
     entry_frames[label_text] = row_frame
-    entry_labels_widget[label_text] = lbl # Zapisujemy odnośnik do widgetu etykiety
+    entry_labels_widget[label_text] = lbl
 
 pdf_all_button = tk.Button(left_frame, text="Pobierz do PDF", 
                            command=lambda: export_to_pdf_from_widget(combine_entry_data(), f"REGON_Raport_{nip_entry.get().strip()}"))
@@ -515,7 +494,9 @@ pdf_all_button.pack(pady=(10, 5))
 clear_left_button = tk.Button(left_frame, text="Wyczyść dane", command=clear_left_panel)
 clear_left_button.pack(pady=(0, 10))
 
-# Prawa kolumna (nowe okno do kopiowania/edycji)
+reset_key_button = tk.Button(left_frame, text="Zresetuj klucz API", command=reset_api_key, fg="red")
+reset_key_button.pack(pady=(20, 0))
+
 right_frame = tk.Frame(main_frame)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
@@ -533,21 +514,31 @@ pdf_selected_button.pack(pady=(10, 5))
 clear_right_button = tk.Button(right_frame, text="Wyczyść wybrane", command=clear_right_panel)
 clear_right_button.pack(pady=(0, 10))
 
-# --- SEKCJA HISTORIA ---
 history_frame = tk.Frame(root)
 history_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
-
 history_label = tk.Label(history_frame, text="Historia wyszukiwania (NIP | Nazwa firmy):")
 history_label.pack()
 
 history_text = scrolledtext.ScrolledText(history_frame, wrap=tk.WORD, width=60, height=8, padx=5, pady=5)
 history_text.pack(fill=tk.BOTH, expand=True)
 history_text.config(state=tk.DISABLED, font=("Courier New", 10))
-
 history_text.bind("<Double-Button-1>", load_nip_from_history)
 
-# Wczytaj historię po starcie aplikacji
-load_history()
+# --- Uruchamianie aplikacji ---
 
-# Uruchomienie pętli głównej Tkinter
-root.mainloop()
+def main():
+    # Sprawdzamy klucz PRZED pokazaniem okna
+    start_key = get_api_key()
+    
+    if start_key:
+        # Jeśli klucz jest, pokazujemy okno i ładujemy historię
+        root.deiconify() 
+        load_history() 
+        root.mainloop()
+    else:
+        # Jeśli użytkownik anulował, zamykamy program
+        root.destroy()
+        sys.exit()
+
+if __name__ == "__main__":
+    main()

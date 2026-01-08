@@ -1,0 +1,8 @@
+api_key.txt
+historia_regon.txt
+build/
+dist/
+__pycache__/
+*.pyc
+.vscode/
+.idea/
